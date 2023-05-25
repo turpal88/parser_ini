@@ -1,0 +1,1 @@
+﻿add_library(parser_ini INTERFACE parser_ini.h)

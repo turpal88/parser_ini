@@ -1,3 +1,0 @@
-﻿class parser_ini {
-
-};
