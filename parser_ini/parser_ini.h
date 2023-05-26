@@ -2,7 +2,7 @@
 #include <fstream>
 #include <stdexcept>
 #include <string>
-//#include <unordered_map>
+
 #include <algorithm>
 
 struct Section { //структура для секции. Секция состоит из названия ("тега") секции [Section_номер_секции]
@@ -14,6 +14,7 @@ struct Section { //структура для секции. Секция сост
 	Section() {
 		number = -1; //в конструкторе инициализируется номер 
 		row_number = 0; //и строка в файле
+		//for (auto& n : string_variables) n.second = std::any_cast<std::string>(n.second);
 	}
 	void print_section() { //вспомогательный метод для печати содержимого секции
 		std::cout << "Section" + std::to_string(number) << " в строке " + std::to_string(row_number) << std::endl;
@@ -46,79 +47,123 @@ public:
 
 	}
 	
-	
+	//основной метод, возвращающий запрашиваемую переменную из запрашиваемой секции
 	template<typename T>
-	T get_value(const std::string& str) {
-		//T value;
-		int num = 0;
-		std::string r = "";
-		std::string name = "";
-		if (str.find("Section") != std::string::npos) {
-			if (str.find('.') != std::string::npos) {
-				//if (str.find(']') == str.find('.') - 1) 
-					int i = 8;
-					while (i < str.find('.')) {
-						r += (str[i] - '0');
-						i++;
-					}
+	T get_value(std::string str) {
+
+		int num = 0; //обнуляем номер секции
+		std::string r = ""; //вспомогательная строковая переменная для проверки корректности тега секции в передаваемой методу строке
+		std::string name = ""; //"зануляем" имя переменной
+		if (str.find("Section") != std::string::npos) { //если фраза Section найдена в передаваемой строке
+			if (str.find('.') != std::string::npos) { //проверяем есть ли после этой фразы точка
 				
-				
+				int i = 7; //индекс символа в передаваемой строке, первый после фразы "Section", с него должен начинаться номер секции
+				while (i < str.find('.')) { //пока не дошли то "."
+					r += str[i]; //складываем символы номера секции во вспом строковую переменную в цикле
+					i++;
+				}
+
+
 			}
-			else {
+			else { //если точки нет-кидаем исключение
 				std::string message = "Отсутсвует имя переменной в передаваемой методу строке. Должна быть \".\" после имени секции, затем имя переменной";
 				throw std::invalid_argument(message);
 			}
-			
+
 		}
-		else {
+		else { //если фразы "Section" нет или она некорректна, кидаем исключение
 			std::string message = "Ошибка в передаваемом методу имени секции!";
 			throw std::invalid_argument(message);
 		}
-		num = std::stoi(r);
-		size_t j = str.find('.');
-		while (j < str.size() - 1) {
+
+
+		try { //проверяем что номер секции корректен
+			num = std::stoi(r);
+		}
+		catch (std::invalid_argument& e) { //если нет-кидаем исключение
+			std::string message = "В передаваемой в метод строке отсутствует или некорректный номер секции";
+			throw std::invalid_argument(message);
+		}
+		
+		size_t j = str.find('.'); //запоминаем индекс символа "."
+		while (j < str.size() - 1) { //от символа с индексом, следующим за точкой до конца передаваемой строки в цикле считываем имя запрашиваемой переменной
 			j++;
 			name += str[j];
 		}
-		parsing();
-		T value;
-		for (auto& n : section) {
-			if (num == n.number) {
-				for (auto& m : n.string_variables) {
-					if (name == m.first) {
-						//value = m.first;
-						//return value;
-						return static_cast<T>(m.second);
+		asked_variable = name; //присваиваем имя переменной переменной класса (чтобы можно было вернуть вызывающей программе)
+		row_numbers = 0;//обнуляем количество строк в файле
+		parsing(); //выполняем парсинг из файла
+		
+		bool is_section_number_found = false; //флаг что запрашиваемый номер секции найден в файле
+		bool is_variable_name_found = false; //флаг что запрашиваемое имя переменной найдено в запрашиваемой секции
+		
+		for (auto& n : section) { //цикл по вектору секций
+			if (num == n.number) { //если нашелся номер секции
+				is_section_number_found = true; //взводим флаг
+				if (is_section_number_found) { //если флаг номера секции в 1
+					for (auto m : n.string_variables) { //идем по циклу по вектору с переменными
+						if (name == m.first) { //если найдено запрашиваемое имя
+							try {
+								//определяем запрашиваемый тип возвращаемого значения
+								if constexpr (std::is_same<T, double>::value) return std::stod(m.second); 
+								else if constexpr (std::is_same<T, int>::value) return std::stoi(m.second);
+								
+								else if constexpr (std::is_same<T, std::string>::value) return m.second;
+							}//если преобразовать значение переменной к запрашиваемому типу невозможно - кидаем исключение
+							catch (std::invalid_argument& e) {
+								std::string message = "Запрашиваемая переменная найдена, но преобразовать ее к запрашиваемому типу невозможно.\nДоступные переменные из этой секции:\n";
+								for (auto& x : n.string_variables) message += x.first + "\n";
+								throw std::invalid_argument(message);
+							}
+							
+						}
 					}
-					else {
-						std::string message = "Запрашиваемая переменная найдена, но преобразовать ее к запрашиваемому типу невозможно.\n Доступные переменные из этой секции:\n";
-						for (auto& x : n.string_variables) std::cout << x.first << std::endl;
-						throw std::invalid_argument(message);
+					//не нашлось имя переменной в запрашиваемой секции - кидаем исключение
+					std::string message = "Запрашиваемая переменная отсутствует в запрашиваемой секции.\nДоступные переменные в запрашиваемой секции:\n";
+
+					for (auto& t : n.string_variables) {
+						message += t.first + "\n";
 					}
+
+					throw std::invalid_argument(message);
+				
 				}
+				
+			} 
+			
+			
+			
+		} //не нашелся запрашиваемый номер секции - кидаем исключение
+			std::string message = "Секции с таким номером нет в файле.\nДоступные секции в файле:\n";
+
+			for (auto& t : section) {
+				message += "Section" + std::to_string(t.number) + "\n";
 			}
-			else {
-				std::string message = "Секции с таким номером нет в файле.\n Доступные секции в файле:\n";
-				for (auto& t : section) {
-					std::cout << "Section" + t.number << std::endl;
-				}
-				for (auto& x : n.string_variables) std::cout << x.first << std::endl;
-				throw std::invalid_argument(message);
-			}
-		}
+			
+			throw std::invalid_argument(message);
+		
+
+		
+		
+		
+
+		
 	
 		
 		
 	}
 	
-	/*
+	
 	Section* get_section(int i) {
 		return &section[i];
 	}
 	size_t get_section_size() {
 		return section.size();
 	}
-	*/
+	
+	std::string get_asked_variable_name() {
+		return asked_variable;
+	}
 
 private:
 	std::string section_name_template; //шаблон названия секции
@@ -128,7 +173,7 @@ private:
 	int row_numbers; //строка в файле где располагается тег секции
 	std::ifstream in; //входной поток
 	std::vector<Section> section; //вектор с секциями
-
+	std::string asked_variable;
 	//проверка что в секции нет задублированных по имени переменных
 	void catch_unique_variables_in_section(Section& sec) {
 		if (sec.string_variables.size() > 1) {
@@ -273,7 +318,7 @@ private:
 						}
 						else { //если хотя бы один символ до номер секции не соответствует шаблону, кидаем исключение
 							std::string message = "Ошибка в теге секции! Строка номер " + std::to_string(row_numbers);
-							std::cout << "Исключение номер 1 " << "\"" << p << "\"" << std::endl;
+							//std::cout << "Исключение номер 1 " << "\"" << p << "\"" << std::endl;
 							throw std::invalid_argument(message);
 						}
 					}
@@ -284,7 +329,7 @@ private:
 						if (it != digits_for_section_numbers + 10) vector_for_parse_section_number += p[i];
 						else if (p[i] != ']') { //иначе кидаем исключение
 							std::string message = "Ошибка в номере секции! Строка номер " + std::to_string(row_numbers);
-							std::cout << "Исключение номер 2 " << "\"" << p << "\"" << std::endl;
+							//std::cout << "Исключение номер 2 " << "\"" << p << "\"" << std::endl;
 							throw std::invalid_argument(message);
 						}
 
@@ -293,7 +338,7 @@ private:
 							j += vector_for_parse_section_number.size(); //прибавляем ко вспомогательной переменной j кол-во символов номера секции
 							if (j == 8) { //если номер вообще нет - 0 символов номера - кидаем исключение
 								std::string message = "Отсутствует номер секции! Строка номер " + std::to_string(row_numbers);
-								std::cout << "Исключение номер 3 " << "\"" << p << "\"" << std::endl;
+								//std::cout << "Исключение номер 3 " << "\"" << p << "\"" << std::endl;
 								throw std::invalid_argument(message);
 							}
 							parsed_section.number = std::stoi(vector_for_parse_section_number); //записываем во всомогательный объект номер секции
@@ -306,7 +351,7 @@ private:
 							for (size_t m = i + 1; m < p.size(); m++) { //в цикле проверяем что в теге секции после закрывающей скобки "]" нет каких-либо символов кроме пробела и ";"
 								if (p[m] != ' ' && p[m] != ';') {//если такие есть - кидаем исключение
 									std::string message = "Посторонние символы в строке секции! Строка номер " + std::to_string(row_numbers);
-									std::cout << "Исключение номер 4 " << "\"" << p << "\"" << std::endl;
+									//std::cout << "Исключение номер 4 " << "\"" << p << "\"" << std::endl;
 									throw std::invalid_argument(message);
 
 								}
@@ -327,7 +372,7 @@ private:
 							|| (p[i] == static_cast<char>(51)) || (p[i] == static_cast<char>(52)) || (p[i] == static_cast<char>(53)) || (p[i] == static_cast<char>(54))
 							|| (p[i] == static_cast<char>(55)) || (p[i] == static_cast<char>(56)) || (p[i] == static_cast<char>(57)))) {
 							std::string message = "Недопустимые символы в имени переменной! Строка номер " + std::to_string(row_numbers);
-							std::cout << "Исключение номер 6 " << "\"" << p << "\"" << std::endl;
+							//std::cout << "Исключение номер 6 " << "\"" << p << "\"" << std::endl;
 							throw std::invalid_argument(message);
 						}
 						else {
@@ -346,6 +391,7 @@ private:
 
 						//если добрались до конца строки, пушим имя переменной и пустое значение переменной в карту
 						if (i == p.size() - 1) {
+							
 							section[section.size() - 1].string_variables.push_back(std::pair<std::string, std::string>(variable_name, variable_value));
 							break;
 						}  
@@ -370,7 +416,7 @@ private:
 						if (it != allowed_ascii_values_for_variable_name.end()) variable_name += p[i];
 						else { //если символ вне допустимого диапазона - кидаем исключение
 							std::string message = "Недопустимые символы в имени переменной! Строка номер " + std::to_string(row_numbers);
-							std::cout << "Исключение номер 7 " << "\"" << p << "\"" << std::endl;
+							//std::cout << "Исключение номер 7 " << "\"" << p << "\"" << std::endl;
 							throw std::invalid_argument(message);
 						}
 
@@ -383,16 +429,18 @@ private:
 					//кидаем исключение в таком случае - либо в имени переменной прямо посреди имени стоит пробел либо не поставлен знак "="
 					if ((is_variable_name_parsed && !is_variable_value_parsed && i == p.size() - 1) || (wait_for_equal_mark && p[i] != ' ' && p[i] != '=')) {
 						std::string message = "Отсутствует знак \"=\" после имени переменной! Строка номер " + std::to_string(row_numbers);
-						std::cout << "Исключение номер 8 " << "\"" << p << "\"" << std::endl;
+						//std::cout << "Исключение номер 8 " << "\"" << p << "\"" << std::endl;
 						throw std::invalid_argument(message);
 					}
 
 					//если парсится значение переменной, символ не является ";" и не пробел, заполняем вспомогательную переменную значения переменной
 					if (is_variable_value_parsed && p[i] != ';') variable_value += p[i];
+					
 
 					//если встретился символ ";" либо достигнут конец строки
 					if (is_variable_value_parsed && (p[i] == ';' || i == p.size() - 1)) {
 						//пушим имя переменной и ее значение в карту
+						//std::any temp = variable_value;
 						section[section.size() - 1].string_variables.push_back(std::pair<std::string, std::string>(variable_name, variable_value));
 						break;
 
@@ -439,8 +487,8 @@ private:
 		for (int i = 0; i < get_section_size(); i++) {
 			get_section(i)->print_section();
 		}
-			*/	
-			
+				
+			*/
 		
 		
 		/*
